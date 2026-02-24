@@ -2,6 +2,9 @@ node_modules/
 dist/
 server/data/
 server/.env
+agent/agent.toml
+agent/agent
+agent/homelab-agent
 *.db
 *.db-wal
 *.db-shm
