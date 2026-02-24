@@ -48,4 +48,8 @@ fi
   --no-first-run \
   --start-fullscreen \
   --autoplay-policy=no-user-gesture-required \
-  "$URL"
+  --disable-background-networking \
+  --disable-sync \
+  --disable-translate \
+  --disable-extensions \
+  "$URL" 2>/dev/null
