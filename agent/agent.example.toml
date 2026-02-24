@@ -1,0 +1,17 @@
+# Homelab Monitor Agent Configuration
+
+# Server connection
+server_url = "http://100.x.x.x:3000"
+auth_token = "changeme-homelab-secret"
+
+# Collection interval in seconds
+interval_seconds = 10
+
+# Ping target (Cloudflare DNS by default)
+ping_target = "1.1.1.1"
+
+# Ping timeout in milliseconds
+# ping_timeout_ms = 3000
+
+# Override hostname (auto-detected if empty)
+# hostname = "my-custom-name"

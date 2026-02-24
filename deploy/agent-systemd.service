@@ -1,0 +1,20 @@
+[Unit]
+Description=Homelab Monitor Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/homelab-agent -config /etc/homelab-monitor/agent.toml
+Restart=always
+RestartSec=5
+User=homelab
+Group=homelab
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
