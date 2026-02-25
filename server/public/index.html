@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="/css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 </head>
+
 <body>
   <!-- ===== Main Grid View ===== -->
   <div id="grid-view">
@@ -24,82 +26,46 @@
     <main id="device-grid"></main>
   </div>
 
-  <!-- ===== Detail Panel ===== -->
   <div id="detail-panel" class="hidden">
     <div class="detail-overlay" id="detail-overlay"></div>
     <div class="detail-content">
-      <button id="detail-close" class="close-btn" aria-label="Close">✕</button>
+
+      <!-- Device name + subtitle -->
       <div class="detail-header">
-        <span id="detail-os-icon" class="os-icon"></span>
-        <div>
-          <h2 id="detail-hostname"></h2>
-          <p id="detail-meta" class="meta"></p>
-        </div>
-        <span id="detail-status-dot" class="status-dot"></span>
+        <h2 id="detail-hostname"></h2>
+        <p id="detail-meta" class="meta"></p>
       </div>
 
-      <!-- Current Metrics -->
-      <div class="metric-cards">
-        <div class="metric-card">
+      <!-- Metric circles -->
+      <div class="metric-circles">
+        <div class="metric-circle cpu">
           <span class="metric-label">CPU</span>
           <span id="detail-cpu" class="metric-value">—</span>
-          <div class="metric-bar"><div id="detail-cpu-bar" class="metric-bar-fill cpu"></div></div>
         </div>
-        <div class="metric-card">
+        <div class="metric-circle mem">
           <span class="metric-label">Memory</span>
           <span id="detail-mem" class="metric-value">—</span>
-          <div class="metric-bar"><div id="detail-mem-bar" class="metric-bar-fill mem"></div></div>
         </div>
-        <div class="metric-card">
+        <div class="metric-circle disk">
           <span class="metric-label">Disk</span>
           <span id="detail-disk" class="metric-value">—</span>
-          <div class="metric-bar"><div id="detail-disk-bar" class="metric-bar-fill disk"></div></div>
         </div>
-        <div class="metric-card">
+        <div class="metric-circle ping">
           <span class="metric-label">Ping</span>
           <span id="detail-ping" class="metric-value">—</span>
-          <div class="metric-bar"><div id="detail-ping-bar" class="metric-bar-fill ping"></div></div>
         </div>
       </div>
 
-      <div id="detail-extra">
-        <p id="detail-uptime"></p>
-        <p id="detail-lastseen"></p>
-      </div>
-
-      <!-- Disk mounts breakdown -->
-      <div id="detail-disks-section" class="disks-section"></div>
-
-      <!-- Time range selector -->
-      <div class="time-range-selector">
-        <button class="range-btn active" data-range="1h">1H</button>
-        <button class="range-btn" data-range="6h">6H</button>
-        <button class="range-btn" data-range="24h">24H</button>
-        <button class="range-btn" data-range="7d">7D</button>
-      </div>
-
-      <!-- Charts -->
-      <div class="charts-grid">
-        <div class="chart-container">
-          <h3>CPU Usage</h3>
-          <canvas id="chart-cpu"></canvas>
-        </div>
-        <div class="chart-container">
-          <h3>Memory Usage</h3>
-          <canvas id="chart-mem"></canvas>
-        </div>
-        <div class="chart-container">
-          <h3>Disk Usage</h3>
-          <canvas id="chart-disk"></canvas>
-        </div>
-        <div class="chart-container">
-          <h3>Ping Latency</h3>
-          <canvas id="chart-ping"></canvas>
-        </div>
+      <!-- Footer info -->
+      <div class="detail-footer">
+        <span id="detail-uptime"></span>
+        <span class="detail-footer-sep">·</span>
+        <span id="detail-lastseen"></span>
       </div>
     </div>
   </div>
 
   <script src="/js/app.js"></script>
 </body>
+
 </html>

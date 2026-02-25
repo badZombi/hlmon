@@ -99,7 +99,6 @@
     const $grid = document.getElementById('device-grid');
     const $detailPanel = document.getElementById('detail-panel');
     const $detailOverlay = document.getElementById('detail-overlay');
-    const $detailClose = document.getElementById('detail-close');
     const $onlineCount = document.getElementById('online-count');
     const $offlineCount = document.getElementById('offline-count');
     const $clock = document.getElementById('clock');
@@ -231,33 +230,24 @@
         const device = state.devices[deviceId];
         if (!device) return;
 
-        const online = isOnline(device);
         const diskPct = getMaxDiskPct(device);
 
-        document.getElementById('detail-os-icon').textContent = osIcon(device.os);
         document.getElementById('detail-hostname').textContent = device.hostname;
         document.getElementById('detail-meta').textContent =
             `${device.os || '?'} / ${device.arch || '?'}`;
 
-        const dot = document.getElementById('detail-status-dot');
-        dot.className = `status-dot ${online ? 'online' : 'offline'}`;
+        // Metric circles
+        setCircleMetric('detail-cpu', device.cpu_pct, '%');
+        setCircleMetric('detail-mem', device.mem_pct, '%');
+        setCircleMetric('detail-disk', diskPct > 0 ? diskPct : null, '%');
 
-        // Metric values
-        setMetric('detail-cpu', 'detail-cpu-bar', device.cpu_pct, '%');
-        setMetric('detail-mem', 'detail-mem-bar', device.mem_pct, '%');
-        setMetric('detail-disk', 'detail-disk-bar', diskPct, '%');
-
-        const pingVal = document.getElementById('detail-ping');
-        const pingBar = document.getElementById('detail-ping-bar');
+        const pingEl = document.getElementById('detail-ping');
         if (device.ping_ms != null) {
-            pingVal.textContent = device.ping_ms.toFixed(1) + 'ms';
-            // Scale: 0–200ms maps to 0–100%
-            pingBar.style.width = Math.min(device.ping_ms / 2, 100) + '%';
-            pingVal.className = 'metric-value' + (device.ping_ms > 200 ? ' crit' : device.ping_ms > 100 ? ' warn' : ' ok');
+            pingEl.textContent = device.ping_ms.toFixed(1) + 'ms';
+            pingEl.className = 'metric-value ' + (device.ping_ms > 200 ? 'crit' : device.ping_ms > 100 ? 'warn' : 'ok');
         } else {
-            pingVal.textContent = '—';
-            pingBar.style.width = '0%';
-            pingVal.className = 'metric-value';
+            pingEl.textContent = '—';
+            pingEl.className = 'metric-value';
         }
 
         document.getElementById('detail-uptime').textContent =
@@ -265,59 +255,18 @@
         document.getElementById('detail-lastseen').textContent =
             `Last seen: ${timeAgo(device.last_seen)}`;
 
-        // Disk mounts
-        renderDiskMounts(device);
-
         $detailPanel.classList.remove('hidden');
-
-        // Load charts
-        loadCharts(deviceId, state.activeRange);
     }
 
-    function setMetric(valueId, barId, pct, suffix) {
+    function setCircleMetric(valueId, pct, suffix) {
         const valEl = document.getElementById(valueId);
-        const barEl = document.getElementById(barId);
         if (pct != null) {
             valEl.textContent = Math.round(pct) + (suffix || '');
-            barEl.style.width = pct + '%';
             valEl.className = 'metric-value ' + thresholdClass(pct);
         } else {
             valEl.textContent = '—';
-            barEl.style.width = '0%';
             valEl.className = 'metric-value';
         }
-    }
-
-    function renderDiskMounts(device) {
-        const section = document.getElementById('detail-disks-section');
-        section.innerHTML = '';
-        if (!device.disk_json) return;
-
-        let disks;
-        try {
-            disks = typeof device.disk_json === 'string'
-                ? JSON.parse(device.disk_json) : device.disk_json;
-        } catch { return; }
-
-        if (!Array.isArray(disks) || disks.length === 0) return;
-
-        const title = document.createElement('h3');
-        title.textContent = 'Disk Mounts';
-        section.appendChild(title);
-
-        disks.forEach(d => {
-            const row = document.createElement('div');
-            row.className = 'disk-mount';
-            row.innerHTML = `
-        <span class="disk-mount-path" title="${d.mount}">${d.mount}</span>
-        <div class="mini-bar">
-          <div class="mini-bar-fill disk ${thresholdClass(d.usage_percent)}"
-               style="width: ${d.usage_percent || 0}%"></div>
-        </div>
-        <span class="disk-mount-info">${formatBytes(d.used_bytes)} / ${formatBytes(d.total_bytes)}</span>
-      `;
-            section.appendChild(row);
-        });
     }
 
     function closeDetail() {
@@ -326,8 +275,14 @@
         destroyCharts();
     }
 
-    $detailClose.addEventListener('click', closeDetail);
-    $detailOverlay.addEventListener('click', closeDetail);
+    $detailPanel.addEventListener('click', e => {
+        // If they click anywhere other than the device info or the metric circles themselves, close it
+        if (!e.target.closest('.metric-circle') &&
+            !e.target.closest('.detail-header') &&
+            !e.target.closest('.detail-footer')) {
+            closeDetail();
+        }
+    });
 
     // Time range buttons
     document.querySelectorAll('.range-btn').forEach(btn => {
