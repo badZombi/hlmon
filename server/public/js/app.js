@@ -12,8 +12,11 @@
         devices: {},              // id → device object
         offlineThreshold: 30,     // seconds
         selectedDeviceId: null,
+        selectedMetric: null,     // 'cpu', 'mem', 'disk', 'ping'
         activeRange: '1h',
+        metricRange: '1h',
         charts: {},               // chartId → Chart instance
+        metricChart: null,        // single chart for metric panel
         ws: null,
         reconnectAttempts: 0,
     };
@@ -41,12 +44,42 @@
         if (!isOnline(device)) return 'offline';
         const cpu = device.cpu_pct ?? 0;
         const mem = device.mem_pct ?? 0;
-        const diskPct = getMaxDiskPct(device);
+        const diskPct = getMaxRealDiskPct(device);
         if (cpu > 95 || mem > 95 || diskPct > 95) return 'critical';
         if (cpu > 80 || mem > 80 || diskPct > 80) return 'warning';
         return 'healthy';
     }
 
+    // Virtual/temporary mount point patterns to exclude from warnings
+    const virtualMountPatterns = [
+        /^\/dev($|\/)/,
+        /^\/sys($|\/)/,
+        /^\/proc($|\/)/,
+        /^\/run($|\/)/,
+        /^\/snap\//,
+        /^\/var\/lib\/docker\//,
+        /^\/var\/lib\/containers\//,
+        /^\/boot\/efi$/,
+    ];
+
+    function isRealDisk(mount) {
+        if (!mount) return false;
+        return !virtualMountPatterns.some(pattern => pattern.test(mount));
+    }
+
+    function getMaxRealDiskPct(device) {
+        if (!device.disk_json) return 0;
+        try {
+            const disks = typeof device.disk_json === 'string'
+                ? JSON.parse(device.disk_json) : device.disk_json;
+            if (!Array.isArray(disks) || disks.length === 0) return 0;
+            const realDisks = disks.filter(d => isRealDisk(d.mount));
+            if (realDisks.length === 0) return 0;
+            return Math.max(...realDisks.map(d => d.usage_percent || 0));
+        } catch { return 0; }
+    }
+
+    // Keep original for display purposes (shows all disks)
     function getMaxDiskPct(device) {
         if (!device.disk_json) return 0;
         try {
@@ -99,6 +132,9 @@
     const $grid = document.getElementById('device-grid');
     const $detailPanel = document.getElementById('detail-panel');
     const $detailOverlay = document.getElementById('detail-overlay');
+    const $detailClose = document.getElementById('detail-close');
+    const $metricPanel = document.getElementById('metric-panel');
+    const $metricClose = document.getElementById('metric-close');
     const $onlineCount = document.getElementById('online-count');
     const $offlineCount = document.getElementById('offline-count');
     const $clock = document.getElementById('clock');
@@ -275,13 +311,45 @@
         destroyCharts();
     }
 
-    $detailPanel.addEventListener('click', e => {
-        // If they click anywhere other than the device info or the metric circles themselves, close it
-        if (!e.target.closest('.metric-circle') &&
-            !e.target.closest('.detail-header') &&
-            !e.target.closest('.detail-footer')) {
+    // Close button (works reliably on touch screens)
+    $detailClose.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeDetail();
+    });
+
+    // Also handle touch events explicitly for better touch response
+    $detailClose.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeDetail();
+    });
+
+    // Click on overlay/background to close (with improved touch handling)
+    $detailPanel.addEventListener('click', (e) => {
+        // Only close if clicking directly on the panel background, not on content
+        if (e.target === $detailPanel || e.target === $detailOverlay) {
             closeDetail();
         }
+    });
+
+    // Metric circle clicks - open metric detail panel
+    document.querySelectorAll('.metric-circle').forEach(circle => {
+        circle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const metric = circle.dataset.metric;
+            if (metric && state.selectedDeviceId) {
+                openMetricDetail(metric);
+            }
+        });
+        
+        circle.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const metric = circle.dataset.metric;
+            if (metric && state.selectedDeviceId) {
+                openMetricDetail(metric);
+            }
+        });
     });
 
     // Time range buttons
@@ -295,6 +363,297 @@
             }
         });
     });
+
+    // -----------------------------------------------------------------------
+    // Metric Detail Panel
+    // -----------------------------------------------------------------------
+
+    const metricLabels = {
+        cpu: 'CPU',
+        mem: 'Memory',
+        disk: 'Disk',
+        ping: 'Network Ping'
+    };
+
+    function openMetricDetail(metric) {
+        state.selectedMetric = metric;
+        const device = state.devices[state.selectedDeviceId];
+        if (!device) return;
+
+        const $title = document.getElementById('metric-title');
+        const $deviceName = document.getElementById('metric-device');
+        const $summary = document.getElementById('metric-summary');
+
+        $title.textContent = metricLabels[metric] || metric;
+        $title.className = metric;
+        $deviceName.textContent = device.hostname;
+
+        // Build summary content based on metric type
+        $summary.innerHTML = buildMetricSummary(metric, device);
+
+        $metricPanel.classList.remove('hidden');
+        loadMetricChart(metric, state.metricRange);
+    }
+
+    function buildMetricSummary(metric, device) {
+        switch (metric) {
+            case 'cpu':
+                return `
+                    <div class="metric-summary-item">
+                        <span class="label">Usage</span>
+                        <span class="value ${thresholdClass(device.cpu_pct)}">${device.cpu_pct != null ? Math.round(device.cpu_pct) + '%' : '—'}</span>
+                    </div>
+                    <div class="metric-summary-item">
+                        <span class="label">Cores</span>
+                        <span class="value">${device.cpu_cores || '—'}</span>
+                    </div>
+                `;
+
+            case 'mem':
+                const memTotal = device.mem_total;
+                const memUsed = device.mem_used;
+                return `
+                    <div class="metric-summary-item">
+                        <span class="label">Usage</span>
+                        <span class="value ${thresholdClass(device.mem_pct)}">${device.mem_pct != null ? Math.round(device.mem_pct) + '%' : '—'}</span>
+                    </div>
+                    <div class="metric-summary-item">
+                        <span class="label">Used</span>
+                        <span class="value">${formatBytes(memUsed)}</span>
+                    </div>
+                    <div class="metric-summary-item">
+                        <span class="label">Total</span>
+                        <span class="value">${formatBytes(memTotal)}</span>
+                    </div>
+                `;
+
+            case 'disk':
+                return buildDiskSummary(device);
+
+            case 'ping':
+                const ping = device.ping_ms;
+                const pingClass = ping != null ? (ping > 200 ? 'crit' : ping > 100 ? 'warn' : 'ok') : '';
+                return `
+                    <div class="metric-summary-item">
+                        <span class="label">Latency</span>
+                        <span class="value ${pingClass}">${ping != null ? ping.toFixed(1) + 'ms' : '—'}</span>
+                    </div>
+                    <div class="metric-summary-item">
+                        <span class="label">Target</span>
+                        <span class="value">${device.ping_target || '1.1.1.1'}</span>
+                    </div>
+                    <div class="metric-summary-item">
+                        <span class="label">Status</span>
+                        <span class="value ${ping != null ? 'ok' : 'crit'}">${ping != null ? 'OK' : 'Failed'}</span>
+                    </div>
+                `;
+
+            default:
+                return '';
+        }
+    }
+
+    function buildDiskSummary(device) {
+        if (!device.disk_json) return '<div class="metric-summary-item"><span class="label">No Data</span><span class="value">—</span></div>';
+
+        try {
+            const disks = typeof device.disk_json === 'string'
+                ? JSON.parse(device.disk_json) : device.disk_json;
+
+            if (!Array.isArray(disks) || disks.length === 0) {
+                return '<div class="metric-summary-item"><span class="label">No Disks</span><span class="value">—</span></div>';
+            }
+
+            // Filter to show only real disks (non-virtual mounts)
+            const realDisks = disks.filter(d => isRealDisk(d.mount));
+
+            return realDisks.map(d => `
+                <div class="metric-summary-item">
+                    <span class="label">${d.mount}</span>
+                    <span class="value ${thresholdClass(d.usage_percent)}">${Math.round(d.usage_percent)}%</span>
+                </div>
+            `).join('') || '<div class="metric-summary-item"><span class="label">No Real Disks</span><span class="value">—</span></div>';
+        } catch {
+            return '<div class="metric-summary-item"><span class="label">Error</span><span class="value">—</span></div>';
+        }
+    }
+
+    function closeMetricDetail() {
+        $metricPanel.classList.add('hidden');
+        state.selectedMetric = null;
+        if (state.metricChart) {
+            state.metricChart.destroy();
+            state.metricChart = null;
+        }
+    }
+
+    // Close button for metric panel
+    $metricClose.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeMetricDetail();
+    });
+
+    $metricClose.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMetricDetail();
+    });
+
+    // Click on background to close metric panel
+    $metricPanel.addEventListener('click', (e) => {
+        if (e.target === $metricPanel) {
+            closeMetricDetail();
+        }
+    });
+
+    // Metric panel range buttons
+    document.querySelectorAll('.range-btn-metric').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.range-btn-metric').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            state.metricRange = btn.dataset.range;
+            if (state.selectedMetric && state.selectedDeviceId) {
+                loadMetricChart(state.selectedMetric, state.metricRange);
+            }
+        });
+    });
+
+    async function loadMetricChart(metric, range) {
+        if (state.metricChart) {
+            state.metricChart.destroy();
+            state.metricChart = null;
+        }
+
+        const deviceId = state.selectedDeviceId;
+        if (!deviceId) return;
+
+        try {
+            const res = await fetch(`/api/devices/${encodeURIComponent(deviceId)}/history?range=${range}`);
+            if (!res.ok) return;
+            const { history } = await res.json();
+            if (!history || history.length === 0) return;
+
+            const labels = history.map(h => {
+                const d = new Date(h.timestamp);
+                return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            });
+
+            let data, color, unit, label, maxY;
+
+            switch (metric) {
+                case 'cpu':
+                    data = history.map(h => h.cpu_pct);
+                    color = chartColors.cpu;
+                    unit = '%';
+                    label = 'CPU %';
+                    maxY = 100;
+                    break;
+                case 'mem':
+                    data = history.map(h => h.mem_pct);
+                    color = chartColors.mem;
+                    unit = '%';
+                    label = 'Memory %';
+                    maxY = 100;
+                    break;
+                case 'disk':
+                    data = history.map(h => {
+                        if (!h.disk_json) return null;
+                        try {
+                            const disks = JSON.parse(h.disk_json);
+                            const realDisks = disks.filter(d => isRealDisk(d.mount));
+                            if (realDisks.length === 0) return null;
+                            return Math.max(...realDisks.map(d => d.usage_percent || 0));
+                        } catch { return null; }
+                    });
+                    color = chartColors.disk;
+                    unit = '%';
+                    label = 'Disk %';
+                    maxY = 100;
+                    break;
+                case 'ping':
+                    data = history.map(h => h.ping_ms);
+                    color = chartColors.ping;
+                    unit = 'ms';
+                    label = 'Ping (ms)';
+                    maxY = null;
+                    break;
+                default:
+                    return;
+            }
+
+            const ctx = document.getElementById('metric-chart').getContext('2d');
+            state.metricChart = new Chart(ctx, buildSmoothChartConfig(label, data, labels, color, unit, maxY));
+        } catch (err) {
+            console.error('Failed to load metric chart:', err);
+        }
+    }
+
+    // Smooth chart config with better animations
+    function buildSmoothChartConfig(label, data, labels, color, unit, maxY) {
+        return {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label,
+                    data,
+                    borderColor: color.border,
+                    backgroundColor: color.bg,
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHitRadius: 10,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 400,
+                    easing: 'easeOutQuart',
+                },
+                transitions: {
+                    active: {
+                        animation: { duration: 200 }
+                    }
+                },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1a2332',
+                        titleColor: '#e4e8f0',
+                        bodyColor: '#8b95a8',
+                        borderColor: 'rgba(255,255,255,0.08)',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: false,
+                        callbacks: {
+                            label: (ctx) => `${ctx.parsed.y?.toFixed(1) ?? '—'}${unit}`
+                        }
+                    },
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255,255,255,0.04)' },
+                        ticks: { color: '#5a6478', maxRotation: 0, maxTicksLimit: 6, font: { size: 11 } },
+                    },
+                    y: {
+                        grid: { color: 'rgba(255,255,255,0.04)' },
+                        ticks: {
+                            color: '#5a6478',
+                            font: { size: 11 },
+                            callback: (v) => v + (unit || '')
+                        },
+                        beginAtZero: true,
+                        max: maxY,
+                    },
+                },
+            },
+        };
+    }
 
     // -----------------------------------------------------------------------
     // Charts (Chart.js)

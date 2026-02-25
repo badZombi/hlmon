@@ -30,6 +30,9 @@
     <div class="detail-overlay" id="detail-overlay"></div>
     <div class="detail-content">
 
+      <!-- Close button for touch screens -->
+      <button id="detail-close" class="close-btn" aria-label="Close">×</button>
+
       <!-- Device name + subtitle -->
       <div class="detail-header">
         <h2 id="detail-hostname"></h2>
@@ -38,19 +41,19 @@
 
       <!-- Metric circles -->
       <div class="metric-circles">
-        <div class="metric-circle cpu">
+        <div class="metric-circle cpu" data-metric="cpu">
           <span class="metric-label">CPU</span>
           <span id="detail-cpu" class="metric-value">—</span>
         </div>
-        <div class="metric-circle mem">
+        <div class="metric-circle mem" data-metric="mem">
           <span class="metric-label">Memory</span>
           <span id="detail-mem" class="metric-value">—</span>
         </div>
-        <div class="metric-circle disk">
+        <div class="metric-circle disk" data-metric="disk">
           <span class="metric-label">Disk</span>
           <span id="detail-disk" class="metric-value">—</span>
         </div>
-        <div class="metric-circle ping">
+        <div class="metric-circle ping" data-metric="ping">
           <span class="metric-label">Ping</span>
           <span id="detail-ping" class="metric-value">—</span>
         </div>
@@ -61,6 +64,37 @@
         <span id="detail-uptime"></span>
         <span class="detail-footer-sep">·</span>
         <span id="detail-lastseen"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Metric Detail Panel -->
+  <div id="metric-panel" class="hidden">
+    <div class="metric-panel-content">
+      <button id="metric-close" class="close-btn" aria-label="Close">×</button>
+      
+      <div class="metric-panel-header">
+        <h2 id="metric-title"></h2>
+        <p id="metric-device" class="meta"></p>
+      </div>
+      
+      <div class="metric-panel-body">
+        <div class="metric-summary" id="metric-summary">
+          <!-- Dynamic content -->
+        </div>
+        
+        <div class="metric-chart-container">
+          <canvas id="metric-chart"></canvas>
+        </div>
+      </div>
+      
+      <div class="metric-panel-footer">
+        <div class="range-buttons">
+          <button class="range-btn-metric active" data-range="1h">1H</button>
+          <button class="range-btn-metric" data-range="6h">6H</button>
+          <button class="range-btn-metric" data-range="24h">24H</button>
+          <button class="range-btn-metric" data-range="7d">7D</button>
+        </div>
       </div>
     </div>
   </div>

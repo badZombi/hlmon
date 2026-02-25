@@ -15,11 +15,13 @@ const devices = [
 async function send(device) {
     device.timestamp = new Date().toISOString();
     const body = JSON.stringify(device);
+    const port = process.env.PORT || 8879;
+    const token = process.env.AUTH_TOKEN || 'changeme-homelab-secret';
     return new Promise((resolve, reject) => {
         const req = http.request({
-            hostname: 'localhost', port: 3333, path: '/api/report',
+            hostname: 'localhost', port: port, path: '/api/report',
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer changeme-homelab-secret' },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         }, (res) => {
             let data = '';
             res.on('data', c => data += c);

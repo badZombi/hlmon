@@ -29,12 +29,14 @@ function init(dbPath) {
       device_id   TEXT NOT NULL REFERENCES devices(id),
       timestamp   TEXT NOT NULL,
       cpu_pct     REAL,
+      cpu_cores   INTEGER,
       mem_pct     REAL,
       mem_used    INTEGER,
       mem_total   INTEGER,
       disk_json   TEXT,
       ping_ms     REAL,
       ping_ok     INTEGER,
+      ping_target TEXT,
       uptime_s    INTEGER
     );
 
@@ -42,7 +44,25 @@ function init(dbPath) {
       ON metrics(device_id, timestamp);
   `);
 
+  // Migrate existing databases — add new columns if they don't exist
+  migrate(db);
+
   return db;
+}
+
+function migrate(db) {
+  // Check existing columns and add missing ones
+  const columns = db.prepare("PRAGMA table_info(metrics)").all();
+  const columnNames = columns.map(c => c.name);
+
+  if (!columnNames.includes('cpu_cores')) {
+    db.exec('ALTER TABLE metrics ADD COLUMN cpu_cores INTEGER');
+    console.log('[DB] Added cpu_cores column');
+  }
+  if (!columnNames.includes('ping_target')) {
+    db.exec('ALTER TABLE metrics ADD COLUMN ping_target TEXT');
+    console.log('[DB] Added ping_target column');
+  }
 }
 
 function getDb() {
@@ -77,8 +97,8 @@ function upsertDevice(report) {
 function getAllDevices() {
   return getDb().prepare(`
     SELECT d.*,
-           m.cpu_pct, m.mem_pct, m.mem_used, m.mem_total,
-           m.disk_json, m.ping_ms, m.ping_ok, m.uptime_s,
+           m.cpu_pct, m.cpu_cores, m.mem_pct, m.mem_used, m.mem_total,
+           m.disk_json, m.ping_ms, m.ping_ok, m.ping_target, m.uptime_s,
            m.timestamp AS metric_ts
     FROM devices d
     LEFT JOIN metrics m ON m.device_id = d.id
@@ -92,8 +112,8 @@ function getAllDevices() {
 function getDevice(id) {
   return getDb().prepare(`
     SELECT d.*,
-           m.cpu_pct, m.mem_pct, m.mem_used, m.mem_total,
-           m.disk_json, m.ping_ms, m.ping_ok, m.uptime_s,
+           m.cpu_pct, m.cpu_cores, m.mem_pct, m.mem_used, m.mem_total,
+           m.disk_json, m.ping_ms, m.ping_ok, m.ping_target, m.uptime_s,
            m.timestamp AS metric_ts
     FROM devices d
     LEFT JOIN metrics m ON m.device_id = d.id
@@ -112,27 +132,29 @@ function insertMetrics(deviceId, report) {
   const ts = report.timestamp || new Date().toISOString();
 
   getDb().prepare(`
-    INSERT INTO metrics (device_id, timestamp, cpu_pct, mem_pct, mem_used, mem_total,
-                         disk_json, ping_ms, ping_ok, uptime_s)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO metrics (device_id, timestamp, cpu_pct, cpu_cores, mem_pct, mem_used, mem_total,
+                         disk_json, ping_ms, ping_ok, ping_target, uptime_s)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     deviceId,
     ts,
     report.cpu?.usage_percent ?? null,
+    report.cpu?.cores ?? null,
     report.memory?.usage_percent ?? null,
     report.memory?.used_bytes ?? null,
     report.memory?.total_bytes ?? null,
     report.disks ? JSON.stringify(report.disks) : null,
     report.ping?.latency_ms ?? null,
     report.ping?.success ? 1 : 0,
+    report.ping?.target ?? null,
     report.uptime_seconds ?? null
   );
 }
 
 function getHistory(deviceId, since) {
   return getDb().prepare(`
-    SELECT timestamp, cpu_pct, mem_pct, mem_used, mem_total,
-           disk_json, ping_ms, ping_ok, uptime_s
+    SELECT timestamp, cpu_pct, cpu_cores, mem_pct, mem_used, mem_total,
+           disk_json, ping_ms, ping_ok, ping_target, uptime_s
     FROM metrics
     WHERE device_id = ? AND timestamp >= ?
     ORDER BY timestamp ASC
