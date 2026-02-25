@@ -134,7 +134,7 @@
         // aspect ratio for each card (target ~1.4:1 width:height)
         let bestCols = 1;
         let bestScore = Infinity;
-        const targetAspect = 1.4;
+        const targetAspect = 1.0; // square cells for circles
 
         for (let cols = 1; cols <= Math.min(deviceCount, 8); cols++) {
             const rows = Math.ceil(deviceCount / cols);
@@ -185,54 +185,37 @@
         $grid.innerHTML = '';
 
         sortedDevices.forEach(device => {
-            const health = healthStatus(device);
             const online = isOnline(device);
-            const diskPct = getMaxDiskPct(device);
+            const health = healthStatus(device);
+
+            // Border class for resource issues (separate from online/offline fill)
+            let borderClass = '';
+            if (online && health === 'critical') borderClass = 'border-critical';
+            else if (online && health === 'warning') borderClass = 'border-warning';
 
             const card = document.createElement('div');
-            card.className = `device-card ${health}`;
+            card.className = `device-card ${online ? 'online' : 'offline'} ${borderClass}`.trim();
             card.dataset.deviceId = device.id;
 
-            card.innerHTML = `
-        <div class="card-header">
-          <span class="os-icon">${osIcon(device.os)}</span>
-          <span class="card-hostname">${device.hostname}</span>
-          <span class="status-dot ${online ? 'online' : 'offline'}"></span>
-        </div>
-        <div class="card-metrics">
-          <div class="mini-metric">
-            <span class="mini-metric-label">CPU</span>
-            <div class="mini-bar">
-              <div class="mini-bar-fill cpu ${thresholdClass(device.cpu_pct)}"
-                   style="width: ${device.cpu_pct ?? 0}%"></div>
-            </div>
-            <span class="mini-metric-value">${device.cpu_pct != null ? Math.round(device.cpu_pct) + '%' : '—'}</span>
-          </div>
-          <div class="mini-metric">
-            <span class="mini-metric-label">MEM</span>
-            <div class="mini-bar">
-              <div class="mini-bar-fill mem ${thresholdClass(device.mem_pct)}"
-                   style="width: ${device.mem_pct ?? 0}%"></div>
-            </div>
-            <span class="mini-metric-value">${device.mem_pct != null ? Math.round(device.mem_pct) + '%' : '—'}</span>
-          </div>
-          <div class="mini-metric">
-            <span class="mini-metric-label">DSK</span>
-            <div class="mini-bar">
-              <div class="mini-bar-fill disk ${thresholdClass(diskPct)}"
-                   style="width: ${diskPct}%"></div>
-            </div>
-            <span class="mini-metric-value">${diskPct > 0 ? Math.round(diskPct) + '%' : '—'}</span>
-          </div>
-        </div>
-        <div class="card-footer">
-          <span class="card-ping">${device.ping_ms != null ? device.ping_ms.toFixed(1) + 'ms' : '—'}</span>
-          <span class="card-lastseen">${timeAgo(device.last_seen)}</span>
-        </div>
-      `;
+            card.innerHTML = `<span class="card-hostname">${device.hostname}</span>`;
 
             card.addEventListener('click', () => openDetail(device.id));
             $grid.appendChild(card);
+        });
+
+        // Auto-scale hostnames to fit inside circle (~70% of card width)
+        requestAnimationFrame(() => {
+            $grid.querySelectorAll('.device-card').forEach(card => {
+                const label = card.querySelector('.card-hostname');
+                if (!label) return;
+                const cardW = card.clientWidth * 0.7; // inscribed width
+                let size = 60;
+                label.style.fontSize = size + 'px';
+                while (label.scrollWidth > cardW && size > 8) {
+                    size -= 1;
+                    label.style.fontSize = size + 'px';
+                }
+            });
         });
     }
 
